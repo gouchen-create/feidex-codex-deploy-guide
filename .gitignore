@@ -1,0 +1,24 @@
+# Feidex local runtime/config
+config.toml
+*.secret
+*.token
+*.key
+.env
+.env.*
+
+# Logs and generated runtime data
+*.log
+*.out
+*.err
+.feidex-data/
+.feidex-attachments/
+outputs/
+tmp/
+temp/
+
+# OS/editor noise
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
