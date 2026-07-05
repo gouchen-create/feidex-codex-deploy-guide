@@ -210,6 +210,55 @@ go version
 
 如果官方安装包下载失败，Codex 应把失败 URL、HTTP 状态或网络错误摘要告诉用户，让用户手动安装 Go 后继续。
 
+### 4.2 winget / MSI 安装 Go 卡住时使用便携 zip
+
+现象：
+
+```text
+winget install --id GoLang.Go -e --source winget
+```
+
+长时间无输出，或者 Windows 任务栏显示安装程序正在请求权限，但用户看不到可操作的 UAC / 安装窗口。
+
+这通常是 MSI 安装器被隐藏的权限确认或交互窗口阻塞。不要一直等待，也不要误判 Go 已安装。先检查并结束本次 Go 安装相关进程，再改用 Go 官方 zip 安装到用户目录。
+
+```powershell
+$goInstallers = Get-CimInstance Win32_Process | Where-Object {
+  $_.CommandLine -match "GoLang.Go|go[0-9.]+\.windows-amd64\.msi|msiexec"
+}
+
+foreach ($p in $goInstallers) {
+  Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+}
+
+$GoJson = Invoke-RestMethod "https://go.dev/dl/?mode=json"
+$GoZip = $GoJson |
+  ForEach-Object { $_.files } |
+  Where-Object { $_.os -eq "windows" -and $_.arch -eq "amd64" -and $_.filename -like "*.zip" } |
+  Select-Object -First 1
+
+if (!$GoZip) {
+  throw "No Windows amd64 Go zip found from go.dev"
+}
+
+$InstallRoot = "$env:LOCALAPPDATA\Programs\go-portable"
+$ZipPath = Join-Path $env:TEMP $GoZip.filename
+New-Item -ItemType Directory -Force $InstallRoot | Out-Null
+Invoke-WebRequest -Uri "https://go.dev/dl/$($GoZip.filename)" -OutFile $ZipPath
+Expand-Archive -Path $ZipPath -DestinationPath $InstallRoot -Force
+
+$GoBin = Join-Path $InstallRoot "go\bin"
+$UserPath = [System.Environment]::GetEnvironmentVariable("Path","User")
+if ($UserPath -notlike "*$GoBin*") {
+  [System.Environment]::SetEnvironmentVariable("Path", "$UserPath;$GoBin", "User")
+}
+
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+go version
+```
+
+通过标准：`go version` 能输出 Windows amd64 版本号。
+
 ## 5. 创建本机工作目录
 
 ```powershell
@@ -283,7 +332,44 @@ Remove-Item -Recurse -Force ".\feidex" -ErrorAction SilentlyContinue
 git -c http.version=HTTP/1.1 clone --depth 1 --single-branch https://github.com/yuhuan417/feidex.git
 ```
 
+如果 `git clone` 没有报错但长时间卡住，而 `git ls-remote https://github.com/yuhuan417/feidex.git HEAD` 可以很快返回，通常是 pack 下载或解包阶段卡住。清理半截 `.git` 目录后，改用 GitHub 源码 zip：
+
+```powershell
+$SrcRoot = "$env:USERPROFILE\codex-feishu-eval"
+$ZipPath = Join-Path $env:TEMP "feidex-main.zip"
+$ExtractRoot = Join-Path $env:TEMP "feidex-main-extract"
+$Dest = Join-Path $SrcRoot "feidex"
+
+New-Item -ItemType Directory -Force $SrcRoot | Out-Null
+Remove-Item -Recurse -Force $Dest -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force $ExtractRoot -ErrorAction SilentlyContinue
+
+Invoke-WebRequest -Uri "https://github.com/yuhuan417/feidex/archive/refs/heads/main.zip" -OutFile $ZipPath
+Expand-Archive -Path $ZipPath -DestinationPath $ExtractRoot -Force
+Move-Item -Path (Join-Path $ExtractRoot "feidex-main") -Destination $Dest
+
+Set-Location $Dest
+go build -o "$env:LOCALAPPDATA\Programs\feidex\feidex.exe" .\cmd\feidex
+```
+
 如果 Go 构建失败，Codex 应先根据错误自动修复常见问题，例如 PATH、依赖下载、网络代理。不能修复时，把错误摘要发给用户。
+
+如果依赖下载报错类似：
+
+```text
+dial tcp [2607:f8b0:...]:443: connectex: A connection attempt failed
+```
+
+通常是 `proxy.golang.org` 的 IPv6 网络不可达。可以切换到国内 Go 代理后重新构建：
+
+```powershell
+go env -w GOPROXY=https://goproxy.cn,direct
+go env -w GOSUMDB=sum.golang.google.cn
+go build -o "$env:LOCALAPPDATA\Programs\feidex\feidex.exe" .\cmd\feidex
+& "$env:LOCALAPPDATA\Programs\feidex\feidex.exe" version
+```
+
+通过标准：`feidex.exe version` 能输出版本号，且 `feidex.exe --help` 能正常显示命令帮助。
 
 ## 7. 创建或获取飞书机器人凭据
 
