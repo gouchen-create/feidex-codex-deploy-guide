@@ -410,6 +410,18 @@ app_id
 app_secret
 ```
 
+每台电脑必须使用独立飞书应用和机器人。新电脑部署时不要复用旧电脑的机器人，即使旧机器人仍能回复也应重新执行创建流程。
+
+创建完成后立刻核对三项：
+
+```text
+飞书后台 App ID == 本机 config.toml 中的 app_id
+飞书后台应用名称 == Codex-<这台电脑名称>
+飞书聊天页选中的会话标题 == Codex-<这台电脑名称>
+```
+
+如果飞书后台初始名称不是 `Codex-<这台电脑名称>`，在“凭证与基础信息 -> 国际化配置”中修改“应用名称”和必填的“应用描述”，保存后必须创建并发布新版本。保存后刷新页面，确认标题和“应用名称”都已变成新名称。
+
 ### 7.2 Codex 没有浏览器/桌面控制能力
 
 Codex 告诉用户手动执行：
@@ -709,6 +721,22 @@ urgent_app failed
 在飞书中找到机器人，发送：
 
 ```text
+https://www.feishu.cn/messages
+```
+
+如果飞书全局搜索搜不到新机器人，先切换到“应用”分类，再搜索 `Codex-<这台电脑名称>`。新发布应用可能还没有历史会话，直接按默认“消息”分类搜索时容易命中旧机器人或同名历史会话。
+
+进入会话前必须确认：
+
+```text
+搜索结果名称 == Codex-<这台电脑名称>
+会话顶部标题 == Codex-<这台电脑名称>
+会话不是旧电脑机器人，例如 Codex-This-PC
+```
+
+确认后先发送：
+
+```text
 /status
 ```
 
@@ -997,6 +1025,7 @@ Method invocation failed because [System.Int32] does not contain a method named 
 - 飞书后台已订阅 `card.action.trigger`。
 - 飞书后台已添加必要权限。
 - 飞书后台已发布版本。
+- 飞书后台 App ID、应用名称和飞书会话标题都对应当前电脑的新机器人。
 - 本机日志显示 `codex app-server ready`。
 - 本机日志显示 `feishu websocket connected`。
 - `feidex daemon status` 显示 `Running`，或手动进程明确在运行。
